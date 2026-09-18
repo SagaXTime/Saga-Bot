@@ -1,0 +1,15 @@
+{
+  "name": "saga-bot",
+  "version": "1.0.0",
+  "description": "Saga Bot - Bot WhatsApp pembuat stiker Brat dan stiker dari foto",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "latest",
+    "qrcode-terminal": "latest",
+    "wa-sticker-formatter": "latest"
+  }
+}
