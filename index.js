@@ -16,6 +16,7 @@ const BOT_NAME = 'Saga Bot'
 const PACK_NAME = 'Saga Bot Sticker'
 const AUTHOR_NAME = 'Saga Bot'
 const WELCOME_FILE = 'welcomed_users.json'
+const NOMOR_BOT = '6281528737834'
 
 // ============================================
 //  Pesan Panduan
@@ -63,7 +64,7 @@ function saveWelcomedUsers(set) {
 let welcomedUsers = loadWelcomedUsers()
 
 // ============================================
-//  Web Server Kecil (Wajib untuk Render)
+//  Web Server Kecil (Wajib untuk Railway/Render)
 // ============================================
 const PORT = process.env.PORT || 7860
 http
@@ -84,12 +85,29 @@ async function startBot() {
     printQRInTerminal: false,
   })
 
+  // --- Pairing Code (untuk 1 HP, tanpa scan QR) ---
+  if (!sock.authState.creds.registered) {
+    setTimeout(async () => {
+      try {
+        const code = await sock.requestPairingCode(NOMOR_BOT)
+        console.log(`\n\n📱 ================================`)
+        console.log(`📱 KODE PAIRING KAMU: ${code}`)
+        console.log(`📱 ================================`)
+        console.log(
+          `\nMasukkan kode ini di WhatsApp → Perangkat Tertaut → Tautkan dengan nomor telepon\n`
+        )
+      } catch (e) {
+        console.error('Gagal minta pairing code:', e)
+      }
+    }, 3000)
+  }
+
   // --- Koneksi ---
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update
 
     if (qr) {
-      console.log(`📱 SCAN QR CODE INI PAKAI WHATSAPP KAMU:`)
+      console.log(`📱 QR Code (kalau mau scan):`)
       qrcode.generate(qr, { small: true })
     }
 
@@ -100,7 +118,9 @@ async function startBot() {
         console.log('🔄 Mencoba menyambung ulang...')
         startBot()
       } else {
-        console.log('❌ Logout. Hapus folder auth_info_baileys lalu jalankan ulang.')
+        console.log(
+          '❌ Logout. Hapus folder auth_info_baileys lalu jalankan ulang.'
+        )
       }
     } else if (connection === 'open') {
       console.log(`✅ ${BOT_NAME} sudah nyala!`)
@@ -129,7 +149,10 @@ async function startBot() {
 
       await sock.sendMessage(jid, { text: PESAN_PANDUAN })
 
-      if (!text.startsWith('/brat.') && !text.toLowerCase().includes('/sticker')) {
+      if (
+        !text.startsWith('/brat.') &&
+        !text.toLowerCase().includes('/sticker')
+      ) {
         return
       }
     }
@@ -152,7 +175,9 @@ async function startBot() {
       }
 
       try {
-        const url = `https://api.siputzx.my.id/api/m/brat?text=${encodeURIComponent(isi)}`
+        const url = `https://api.siputzx.my.id/api/m/brat?text=${encodeURIComponent(
+          isi
+        )}`
         const res = await fetch(url)
         const buffer = Buffer.from(await res.arrayBuffer())
 
