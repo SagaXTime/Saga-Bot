@@ -7,7 +7,6 @@ import makeWASocket, {
 import { Sticker, StickerTypes } from 'wa-sticker-formatter'
 import qrcode from 'qrcode-terminal'
 import http from 'http'
-import fs from 'fs'
 
 // ============================================
 //  SAGA BOT - Konfigurasi
@@ -15,8 +14,17 @@ import fs from 'fs'
 const BOT_NAME = 'Saga Bot'
 const PACK_NAME = 'Saga Bot Sticker'
 const AUTHOR_NAME = 'Saga Bot'
-const WELCOME_FILE = 'welcomed_users.json'
 const NOMOR_BOT = '6281528737834'
+
+// ============================================
+//  🔐 WHITELIST - Cuma nomor ini yang boleh pakai bot
+//  Format: awali 62, tanpa +, tanpa 0, tanpa spasi
+//  Tambah nomor lain dengan tanda koma
+// ============================================
+const WHITELIST = [
+  '6281528737834', // <-- nomor kamu
+  // '6281234567890', // contoh: nomor teman kamu
+]
 
 // ============================================
 //  Pesan Panduan
@@ -38,30 +46,6 @@ Bot akan ubah foto itu jadi stiker.
 ━━━━━━━━━━━━━━━━━━━
 💡 Ketik */menu* kapan saja untuk lihat panduan ini lagi.
 Selamat mencoba! 🚀`
-
-// ============================================
-//  Fungsi Baca/Tulis Daftar User yang Sudah Disambut
-// ============================================
-function loadWelcomedUsers() {
-  try {
-    if (fs.existsSync(WELCOME_FILE)) {
-      return new Set(JSON.parse(fs.readFileSync(WELCOME_FILE, 'utf-8')))
-    }
-  } catch (e) {
-    console.error('Gagal baca welcomed_users.json:', e)
-  }
-  return new Set()
-}
-
-function saveWelcomedUsers(set) {
-  try {
-    fs.writeFileSync(WELCOME_FILE, JSON.stringify([...set], null, 2))
-  } catch (e) {
-    console.error('Gagal simpan welcomed_users.json:', e)
-  }
-}
-
-let welcomedUsers = loadWelcomedUsers()
 
 // ============================================
 //  Web Server Kecil (Wajib untuk Railway/Render)
@@ -137,40 +121,49 @@ async function startBot() {
     const jid = msg.key.remoteJid
     if (!jid) return
 
-    // 🛡️ PERBAIKAN 1: JANGAN PERNAH MERESPON GRUP!
+    // 🛡️ BLOKIR GRUP TOTAL
     if (jid.endsWith('@g.us')) return
+
+    // Ambil nomor pengirim (tanpa @s.whatsapp.net)
+    const nomorPengirim = jid.split('@')[0].split(':')[0]
+
+    // 🔐 CEK WHITELIST — kalau bukan orang yang diizinkan, abaikan total
+    if (!WHITELIST.includes(nomorPengirim)) {
+      console.log(`⛔ Pesan dari ${nomorPengirim} diabaikan (tidak di whitelist)`)
+      return
+    }
 
     const text =
       msg.message.conversation ||
       msg.message.extendedTextMessage?.text ||
       ''
 
-    // Deteksi apakah pesan ini sebuah perintah (command)
-    const isCommand =
-      text.startsWith('/brat.') ||
-      text.toLowerCase().includes('/sticker') ||
-      text.toLowerCase() === '/menu' ||
-      text.toLowerCase() === '/help'
+    // Deteksi apakah pesan ini command
+    const isMenuCommand =
+      text.toLowerCase() === '/menu' || text.toLowerCase() === '/help'
+    const isBratCommand = text.startsWith('/brat.')
+    const isStickerCommand = text.toLowerCase().includes('/sticker')
 
-    // Jika pesan dari bot sendiri dan bukan perintah, abaikan
-    if (msg.key.fromMe && !isCommand) return
+    // ❌ Kalau bukan command, diamkan aja (nggak ada auto-welcome lagi)
+    if (!isMenuCommand && !isBratCommand && !isStickerCommand) {
+      // Khusus imageMessage dengan /sticker, kita lanjut. Kalau bukan, return.
+      const tipe = getContentType(msg.message)
+      if (tipe !== 'imageMessage') return
+    }
 
-    // ========== AUTO WELCOME (Pesan Pertama Kali) ==========
-    if (!welcomedUsers.has(jid)) {
-      welcomedUsers.add(jid)
-      saveWelcomedUsers(welcomedUsers)
-
-      await sock.sendMessage(jid, { text: PESAN_PANDUAN })
+    // Kalau pesan dari bot sendiri (fromMe) dan bukan command, abaikan
+    if (msg.key.fromMe && !isMenuCommand && !isBratCommand && !isStickerCommand) {
+      return
     }
 
     // ========== COMMAND: /menu atau /help ==========
-    if (text.toLowerCase() === '/menu' || text.toLowerCase() === '/help') {
+    if (isMenuCommand) {
       await sock.sendMessage(jid, { text: PESAN_PANDUAN })
       return
     }
 
     // ========== COMMAND: /brat. ==========
-    if (text.startsWith('/brat.')) {
+    if (isBratCommand) {
       const isi = text.slice(6).trim()
 
       if (!isi) {
@@ -181,12 +174,12 @@ async function startBot() {
       }
 
       try {
-        // 🛠️ PERBAIKAN 2: Pakai API cadangan yang lebih stabil
-        const apiUrl = `https://api.lolhuman.xyz/api/brat?apikey=dannz&text=${encodeURIComponent(isi)}`
-        
-        const res = await fetch(apiUrl)
+        const url = `https://api.lolhuman.xyz/api/brat?apikey=dannz&text=${encodeURIComponent(
+          isi
+        )}`
+        const res = await fetch(url)
         if (!res.ok) throw new Error('API Brat sedang down')
-        
+
         const buffer = Buffer.from(await res.arrayBuffer())
 
         const sticker = new Sticker(buffer, {
