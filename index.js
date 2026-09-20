@@ -62,7 +62,7 @@ http
 //  Fungsi Utama Saga Bot
 // ============================================
 async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
+  const { state, saveCreds } = await useMultiFileAuthState('saga-session-' + Date.now())
 
   const sock = makeWASocket({
     auth: state,
