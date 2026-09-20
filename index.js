@@ -19,11 +19,9 @@ const NOMOR_BOT = '6281528737834'
 // ============================================
 //  🔐 WHITELIST - Cuma nomor ini yang boleh pakai bot
 //  Format: awali 62, tanpa +, tanpa 0, tanpa spasi
-//  Tambah nomor lain dengan tanda koma
 // ============================================
 const WHITELIST = [
   '6281528737834', // <-- nomor kamu
-  // '6281234567890', // contoh: nomor teman kamu
 ]
 
 // ============================================
@@ -36,19 +34,15 @@ Bot ini siap membantu kamu membuat stiker WhatsApp dengan 2 fitur keren:
 🎨 *1. Buat Stiker Brat*
 Ketik: */brat.Teks kamu*
 Contoh: _/brat.Halo Dunia_
-Bot akan buatkan stiker bergaya Brat.
 
 📸 *2. Buat Stiker dari Foto*
-Kirim *foto* ke bot dengan caption: */sticker*
-Contoh: kirim foto apa saja + caption _/sticker_
-Bot akan ubah foto itu jadi stiker.
+Kirim *foto* + caption: */sticker*
 
 ━━━━━━━━━━━━━━━━━━━
-💡 Ketik */menu* kapan saja untuk lihat panduan ini lagi.
-Selamat mencoba! 🚀`
+💡 Ketik */menu* untuk lihat panduan ini lagi.`
 
 // ============================================
-//  Web Server Kecil (Wajib untuk Railway/Render)
+//  Web Server Kecil (Wajib untuk Railway)
 // ============================================
 const PORT = process.env.PORT || 7860
 http
@@ -62,14 +56,15 @@ http
 //  Fungsi Utama Saga Bot
 // ============================================
 async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('saga-session-' + Date.now())
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
 
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
+    browser: ['Saga Bot', 'Chrome', '1.0.0'],
   })
 
-  // --- Pairing Code (untuk 1 HP, tanpa scan QR) ---
+  // --- Pairing Code (untuk 1 HP) ---
   if (!sock.authState.creds.registered) {
     setTimeout(async () => {
       try {
@@ -77,13 +72,11 @@ async function startBot() {
         console.log(`\n\n📱 ================================`)
         console.log(`📱 KODE PAIRING KAMU: ${code}`)
         console.log(`📱 ================================`)
-        console.log(
-          `\nMasukkan kode ini di WhatsApp → Perangkat Tertaut → Tautkan dengan nomor telepon\n`
-        )
+        console.log(`\nMasukkan di WhatsApp → Perangkat Tertaut → Tautkan dengan nomor telepon\n`)
       } catch (e) {
-        console.error('Gagal minta pairing code:', e)
+        console.error('❌ Gagal minta pairing code:', e.message)
       }
-    }, 3000)
+    }, 5000)
   }
 
   // --- Koneksi ---
@@ -91,23 +84,19 @@ async function startBot() {
     const { connection, lastDisconnect, qr } = update
 
     if (qr) {
-      console.log(`📱 QR Code (kalau mau scan):`)
+      console.log(`📱 QR Code:`)
       qrcode.generate(qr, { small: true })
     }
 
     if (connection === 'close') {
       const shouldReconnect =
         lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+      console.log('❌ Koneksi terputus. Reconnect:', shouldReconnect)
       if (shouldReconnect) {
-        console.log('🔄 Mencoba menyambung ulang...')
-        startBot()
-      } else {
-        console.log(
-          '❌ Logout. Hapus folder auth_info_baileys lalu jalankan ulang.'
-        )
+        setTimeout(() => startBot(), 3000)
       }
     } else if (connection === 'open') {
-      console.log(`✅ ${BOT_NAME} sudah nyala!`)
+      console.log(`✅ ${BOT_NAME} sudah nyala dan siap dipakai!`)
     }
   })
 
@@ -124,12 +113,12 @@ async function startBot() {
     // 🛡️ BLOKIR GRUP TOTAL
     if (jid.endsWith('@g.us')) return
 
-    // Ambil nomor pengirim (tanpa @s.whatsapp.net)
+    // Ambil nomor pengirim
     const nomorPengirim = jid.split('@')[0].split(':')[0]
 
-    // 🔐 CEK WHITELIST — kalau bukan orang yang diizinkan, abaikan total
+    // 🔐 CEK WHITELIST
     if (!WHITELIST.includes(nomorPengirim)) {
-      console.log(`⛔ Pesan dari ${nomorPengirim} diabaikan (tidak di whitelist)`)
+      console.log(`⛔ Diabaikan (bukan whitelist): ${nomorPengirim}`)
       return
     }
 
@@ -138,89 +127,68 @@ async function startBot() {
       msg.message.extendedTextMessage?.text ||
       ''
 
-    // Deteksi apakah pesan ini command
-    const isMenuCommand =
-      text.toLowerCase() === '/menu' || text.toLowerCase() === '/help'
-    const isBratCommand = text.startsWith('/brat.')
-    const isStickerCommand = text.toLowerCase().includes('/sticker')
+    // Deteksi command
+    const isMenu = text.toLowerCase() === '/menu' || text.toLowerCase() === '/help'
+    const isBrat = text.startsWith('/brat.')
+    const isSticker = text.toLowerCase().includes('/sticker')
 
-    // ❌ Kalau bukan command, diamkan aja (nggak ada auto-welcome lagi)
-    if (!isMenuCommand && !isBratCommand && !isStickerCommand) {
-      // Khusus imageMessage dengan /sticker, kita lanjut. Kalau bukan, return.
-      const tipe = getContentType(msg.message)
-      if (tipe !== 'imageMessage') return
-    }
+    // Kalau bukan command dan bukan gambar, diamkan
+    const tipe = getContentType(msg.message)
+    if (!isMenu && !isBrat && !isSticker) return
 
     // Kalau pesan dari bot sendiri (fromMe) dan bukan command, abaikan
-    if (msg.key.fromMe && !isMenuCommand && !isBratCommand && !isStickerCommand) {
-      return
-    }
+    if (msg.key.fromMe && !isMenu && !isBrat && !isSticker) return
 
-    // ========== COMMAND: /menu atau /help ==========
-    if (isMenuCommand) {
+    // ========== COMMAND: /menu ==========
+    if (isMenu) {
       await sock.sendMessage(jid, { text: PESAN_PANDUAN })
       return
     }
 
     // ========== COMMAND: /brat. ==========
-    if (isBratCommand) {
+    if (isBrat) {
       const isi = text.slice(6).trim()
-
       if (!isi) {
-        await sock.sendMessage(jid, {
-          text: `Contoh: /brat.Halo Semua`,
-        })
+        await sock.sendMessage(jid, { text: `Contoh: /brat.Halo Semua` })
         return
       }
 
       try {
-        const url = `https://api.lolhuman.xyz/api/brat?apikey=dannz&text=${encodeURIComponent(
-          isi
-        )}`
+        const url = `https://api.lolhuman.xyz/api/brat?apikey=dannz&text=${encodeURIComponent(isi)}`
         const res = await fetch(url)
-        if (!res.ok) throw new Error('API Brat sedang down')
+        if (!res.ok) throw new Error('API Brat down')
 
         const buffer = Buffer.from(await res.arrayBuffer())
-
         const sticker = new Sticker(buffer, {
           pack: PACK_NAME,
           author: AUTHOR_NAME,
           type: StickerTypes.FULL,
           quality: 80,
         })
-
         await sock.sendMessage(jid, { sticker: await sticker.toBuffer() })
       } catch (e) {
-        console.error('Error brat:', e)
-        await sock.sendMessage(jid, {
-          text: '❌ Gagal membuat stiker Brat. Coba lagi nanti ya.',
-        })
+        console.error('Error brat:', e.message)
+        await sock.sendMessage(jid, { text: '❌ Gagal buat stiker Brat. Coba lagi.' })
       }
       return
     }
 
     // ========== COMMAND: /sticker ==========
-    const tipe = getContentType(msg.message)
     if (tipe === 'imageMessage') {
       const caption = msg.message.imageMessage?.caption || ''
-
       if (caption.toLowerCase().includes('/sticker')) {
         try {
           const buffer = await downloadMediaMessage(msg, 'buffer', {})
-
           const sticker = new Sticker(buffer, {
             pack: PACK_NAME,
             author: AUTHOR_NAME,
             type: StickerTypes.FULL,
             quality: 80,
           })
-
           await sock.sendMessage(jid, { sticker: await sticker.toBuffer() })
         } catch (e) {
-          console.error('Error sticker:', e)
-          await sock.sendMessage(jid, {
-            text: '❌ Gagal membuat stiker. Pastikan gambar valid.',
-          })
+          console.error('Error sticker:', e.message)
+          await sock.sendMessage(jid, { text: '❌ Gagal buat stiker.' })
         }
       }
     }
