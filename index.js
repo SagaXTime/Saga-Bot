@@ -132,7 +132,7 @@ async function startBot() {
   // --- Handler Pesan Masuk ---
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0]
-    if (!msg.message || msg.key.fromMe) return
+    if (!msg.message) return
 
     const jid = msg.key.remoteJid
     if (!jid) return
@@ -142,19 +142,22 @@ async function startBot() {
       msg.message.extendedTextMessage?.text ||
       ''
 
+    // Deteksi apakah pesan ini sebuah perintah (command)
+    const isCommand =
+      text.startsWith('/brat.') ||
+      text.toLowerCase().includes('/sticker') ||
+      text.toLowerCase() === '/menu' ||
+      text.toLowerCase() === '/help'
+
+    // Jika pesan dari bot sendiri dan bukan perintah, abaikan
+    if (msg.key.fromMe && !isCommand) return
+
     // ========== AUTO WELCOME (Pesan Pertama Kali) ==========
     if (!welcomedUsers.has(jid)) {
       welcomedUsers.add(jid)
       saveWelcomedUsers(welcomedUsers)
 
       await sock.sendMessage(jid, { text: PESAN_PANDUAN })
-
-      if (
-        !text.startsWith('/brat.') &&
-        !text.toLowerCase().includes('/sticker')
-      ) {
-        return
-      }
     }
 
     // ========== COMMAND: /menu atau /help ==========
