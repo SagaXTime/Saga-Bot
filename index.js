@@ -137,6 +137,9 @@ async function startBot() {
     const jid = msg.key.remoteJid
     if (!jid) return
 
+    // 🛡️ PERBAIKAN 1: JANGAN PERNAH MERESPON GRUP!
+    if (jid.endsWith('@g.us')) return
+
     const text =
       msg.message.conversation ||
       msg.message.extendedTextMessage?.text ||
@@ -178,10 +181,12 @@ async function startBot() {
       }
 
       try {
-        const url = `https://api.siputzx.my.id/api/m/brat?text=${encodeURIComponent(
-          isi
-        )}`
-        const res = await fetch(url)
+        // 🛠️ PERBAIKAN 2: Pakai API cadangan yang lebih stabil
+        const apiUrl = `https://api.lolhuman.xyz/api/brat?apikey=dannz&text=${encodeURIComponent(isi)}`
+        
+        const res = await fetch(apiUrl)
+        if (!res.ok) throw new Error('API Brat sedang down')
+        
         const buffer = Buffer.from(await res.arrayBuffer())
 
         const sticker = new Sticker(buffer, {
@@ -195,7 +200,7 @@ async function startBot() {
       } catch (e) {
         console.error('Error brat:', e)
         await sock.sendMessage(jid, {
-          text: '❌ Gagal membuat stiker Brat. Coba lagi nanti.',
+          text: '❌ Gagal membuat stiker Brat. Coba lagi nanti ya.',
         })
       }
       return
